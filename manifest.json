@@ -1,0 +1,23 @@
+{
+  "name": "LinguaReader Coach",
+  "short_name": "LinguaReader",
+  "description": "A shareable English reading, listening, translation, and shadowing coach.",
+  "id": "./",
+  "start_url": "./?source=pwa",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "orientation": "any",
+  "background_color": "#f4f4ef",
+  "theme_color": "#1e7b68",
+  "categories": ["education", "books", "productivity"],
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "./app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

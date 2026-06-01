@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LinguaReader Coach</title>
+    <meta name="description" content="可分享的英语阅读、翻译、朗读和跟读评分网页应用。" />
+    <meta name="theme-color" content="#1e7b68" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="LinguaReader" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="manifest" href="./manifest.json?v=18" />
+    <link rel="icon" href="./app-icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./app-icon.svg" />
+    <link rel="stylesheet" href="./styles.css?v=18" />
+    <script src="./vendor/lucide.min.js" defer></script>
+    <script type="module" src="./app.js?v=18"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="library-pane" id="libraryPane">
+        <div class="brand-row">
+          <div class="brand-mark">LR</div>
+          <div>
+            <h1>LinguaReader</h1>
+            <p>沉浸式英语阅读</p>
+          </div>
+          <button class="icon-button mobile-only sidebar-close" id="closeSidebarBtn" type="button" title="收起侧栏" aria-label="收起侧栏">
+            <i data-lucide="x"></i>
+          </button>
+          <button class="icon-button sidebar-hide-button" id="hideSidebarBtn" type="button" title="隐藏书架" aria-label="隐藏书架">
+            <i data-lucide="panel-left-close"></i>
+          </button>
+        </div>
+
+        <label class="import-drop" id="dropZone">
+          <input
+            id="fileInput"
+            type="file"
+            accept=".txt,.md,.markdown,.html,.htm,.csv,.srt,.vtt,.docx,.epub,.pdf,text/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/epub+zip"
+            multiple
+          />
+          <span class="drop-icon" aria-hidden="true"><i data-lucide="upload-cloud"></i></span>
+          <strong>导入本地文件</strong>
+          <small>TXT / PDF / DOCX / EPUB / MD / HTML</small>
+        </label>
+        <input id="coverInput" type="file" accept="image/*" hidden />
+
+        <div class="library-actions">
+          <button class="soft-button" id="sampleBtn" type="button">
+            <i data-lucide="book-open"></i>
+            示例文章
+          </button>
+          <button class="icon-button" id="clearLibraryBtn" type="button" title="清空书架" aria-label="清空书架">
+            <i data-lucide="trash-2"></i>
+          </button>
+        </div>
+
+        <div class="section-label">书架</div>
+        <nav class="doc-list" id="docList" aria-label="书架"></nav>
+
+        <section class="side-panel practice-sidebar" hidden>
+          <header>
+            <div>
+              <span>Shadowing</span>
+              <h3>跟读评分</h3>
+            </div>
+            <div class="side-panel-actions">
+              <button class="icon-button" type="button" id="readPracticeBtn" title="朗读跟读内容" aria-label="朗读跟读内容">
+                <i data-lucide="volume-2"></i>
+              </button>
+              <button class="icon-button" type="button" id="resetScoreBtn" title="重置评分" aria-label="重置评分">
+                <i data-lucide="rotate-ccw"></i>
+              </button>
+            </div>
+          </header>
+          <div class="practice-layer">
+            <span>跟读内容</span>
+            <div class="practice-target" id="practiceTargetText">选中文章中的一句或一段开始跟读。</div>
+          </div>
+          <div class="practice-layer">
+            <span>跟读语音</span>
+            <div class="recorder-row">
+              <button type="button" id="recordBtn">
+                <i data-lucide="mic"></i>
+                跟读
+              </button>
+              <button type="button" id="recordStopBtn" disabled>
+                <i data-lucide="mic-off"></i>
+                停止
+              </button>
+              <button type="button" id="scoreTypedBtn">
+                <i data-lucide="badge-check"></i>
+                评分
+              </button>
+              <button type="button" id="stopScoreBtn">
+                <i data-lucide="square"></i>
+                停止评分
+              </button>
+            </div>
+            <textarea id="transcriptInput" rows="3" placeholder="识别文本会出现在这里，也可以手动输入后评分。"></textarea>
+            <div class="score-output" id="scoreOutput"></div>
+          </div>
+        </section>
+
+        <section class="side-panel bookmark-sidebar" id="bookmarkDrawer" hidden>
+          <header>
+            <div>
+              <span>Bookmarks</span>
+              <h3>书签</h3>
+            </div>
+            <div class="side-panel-actions">
+              <button class="icon-button" id="clearBookmarksBtn" type="button" title="清空书签" aria-label="清空书签">
+                <i data-lucide="trash-2"></i>
+              </button>
+              <button class="icon-button" id="hideBookmarksBtn" type="button" title="隐藏书签" aria-label="隐藏书签">
+                <i data-lucide="x"></i>
+              </button>
+            </div>
+          </header>
+          <div class="bookmark-list" id="bookmarkList"></div>
+        </section>
+
+        <div class="support-note" id="supportStatus"></div>
+        <div class="sidebar-resizer" id="sidebarResizer" role="separator" aria-label="调整左侧栏宽度" title="拖动调整左侧栏宽度"></div>
+      </aside>
+
+      <main class="reader-shell">
+        <header class="reader-topbar">
+          <button class="icon-button mobile-only" id="toggleSidebarBtn" type="button" title="书架" aria-label="书架">
+            <i data-lucide="panel-left"></i>
+          </button>
+
+          <div class="doc-heading">
+            <span id="docFormat">DEMO</span>
+            <div>
+              <h2 id="docTitle">示例文章</h2>
+              <p id="docStats">0 words</p>
+            </div>
+          </div>
+
+          <div class="voice-controls" aria-label="语音设置">
+            <label>
+              <span>发音</span>
+              <select id="accentSelect">
+                <option value="auto">专业推荐</option>
+                <option value="en-US">美音</option>
+                <option value="en-GB">英音</option>
+                <option value="en-AU">澳音</option>
+              </select>
+            </label>
+            <label class="voice-field">
+              <span>音色</span>
+              <select id="voiceSelect"></select>
+            </label>
+            <label>
+              <span>风格</span>
+              <select id="voiceStyleSelect">
+                <option value="natural">自然</option>
+                <option value="clear">清晰</option>
+                <option value="warm">温和</option>
+                <option value="story">有感情</option>
+              </select>
+            </label>
+            <label class="speed-field">
+              <span>语速 <b id="rateValue">0.95x</b></span>
+              <input id="rateRange" type="range" min="0.65" max="1.35" step="0.05" value="0.95" />
+            </label>
+            <button class="soft-button voice-test-button" id="playUsVoiceBtn" type="button" hidden>
+              <i data-lucide="play"></i>
+              美音试听
+            </button>
+            <button class="soft-button voice-test-button" id="playUkVoiceBtn" type="button" hidden>
+              <i data-lucide="play"></i>
+              英音试听
+            </button>
+          </div>
+
+          <div class="reading-controls" aria-label="阅读排版">
+            <label>
+              <span>字体</span>
+              <select id="fontFamilySelect">
+                <option value="serif">英文衬线</option>
+                <option value="sans">清爽无衬线</option>
+                <option value="system">系统字体</option>
+              </select>
+            </label>
+            <label>
+              <span>格式</span>
+              <select id="formatSelect">
+                <option value="comfortable">舒适</option>
+                <option value="compact">紧凑</option>
+                <option value="loose">宽松</option>
+              </select>
+            </label>
+            <label class="speed-field">
+              <span>大小 <b id="fontSizeValue">100%</b></span>
+              <input id="fontSizeRange" type="range" min="80" max="150" step="5" value="100" />
+            </label>
+            <label>
+              <span>翻阅</span>
+              <select id="pageModeSelect">
+                <option value="scroll">滚动</option>
+                <option value="snap">分页停靠</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="top-actions">
+            <button class="primary-button" id="speakArticleBtn" type="button">
+              <i data-lucide="volume-2"></i>
+              <span>全文</span>
+            </button>
+            <button class="icon-button" id="pauseBtn" type="button" title="暂停/继续" aria-label="暂停或继续朗读">
+              <i data-lucide="pause"></i>
+            </button>
+            <button class="icon-button" id="stopBtn" type="button" title="停止" aria-label="停止朗读">
+              <i data-lucide="square"></i>
+            </button>
+            <button class="icon-button" id="immersiveToggleBtn" type="button" title="沉浸阅读" aria-label="沉浸阅读">
+              <i data-lucide="maximize"></i>
+            </button>
+            <button class="icon-button" id="topbarHideBtn" type="button" title="隐藏顶部功能栏" aria-label="隐藏顶部功能栏">
+              <i data-lucide="eye-off"></i>
+            </button>
+          </div>
+        </header>
+        <div class="topbar-resizer" id="topbarResizer" role="separator" aria-label="调整顶部功能区高度" title="拖动调整顶部功能区高度"></div>
+
+        <section class="reader-stage">
+          <article class="reader-panel">
+            <div class="reader-toolbar">
+              <p>用鼠标选中单词、词组、句子或段落，工具条会自动出现。</p>
+              <div class="reader-toolbar-actions">
+                <label class="soft-button audio-upload">
+                  <input id="voiceSampleInput" type="file" accept="audio/*" />
+                  <i data-lucide="file-audio"></i>
+                  参考音频
+                </label>
+                <button class="soft-button" id="bookmarkToggleBtn" type="button">
+                  <i data-lucide="bookmark"></i>
+                  书签
+                </button>
+                <button class="soft-button" id="tocToggleBtn" type="button">
+                  <i data-lucide="list-tree"></i>
+                  目录
+                </button>
+                <button class="soft-button mobile-import-button" id="mobileImportBtn" type="button">
+                  <i data-lucide="upload"></i>
+                  手机上传
+                </button>
+                <button class="soft-button active" id="cursorTranslateToggleBtn" type="button">
+                  <i data-lucide="mouse-pointer-2"></i>
+                  光标翻译
+                </button>
+                <label class="width-control" title="调整正文版心宽度">
+                  <span>版心</span>
+                  <input id="readingWidthRange" type="range" min="680" max="1180" step="20" value="880" />
+                </label>
+                <label class="width-control zoom-control" title="只缩放文章正文">
+                  <span>缩放 <b id="readingZoomValue">100%</b></span>
+                  <input id="readingZoomRange" type="range" min="80" max="150" step="5" value="100" />
+                </label>
+                <span class="page-status" id="pageStatus">第 1 / 1 页</span>
+                <button class="icon-button" id="toolbarHideBtn" type="button" title="隐藏文章工具栏" aria-label="隐藏文章工具栏">
+                  <i data-lucide="eye-off"></i>
+                </button>
+              </div>
+            </div>
+            <div class="voice-profile" id="voiceProfile" hidden></div>
+            <div class="reader-workspace">
+              <aside class="reader-toc" id="readerToc" hidden>
+                <header>
+                  <strong>目录</strong>
+                  <span>双击书签、单击目录均可跳转</span>
+                  <button class="icon-button inline-hide-button" id="hideTocBtn" type="button" title="隐藏目录" aria-label="隐藏目录">
+                    <i data-lucide="eye-off"></i>
+                  </button>
+                </header>
+                <div class="toc-list" id="tocList"></div>
+              </aside>
+              <div class="pane-resizer toc-pane-resizer" id="tocResizer" role="separator" aria-label="调整目录宽度" title="拖动调整目录宽度"></div>
+              <div class="reader-content" id="readerContent" tabindex="0" aria-label="文章内容"></div>
+              <div class="pane-resizer aside-pane-resizer" id="asideResizer" role="separator" aria-label="调整右侧书签区宽度" title="拖动调整右侧书签区宽度"></div>
+              <aside class="reader-aside" id="readerAside">
+                <header>
+                  <strong>书签与记忆</strong>
+                  <span id="readingMemory">第 1 页</span>
+                  <button class="icon-button inline-hide-button" id="hideAsideBtn" type="button" title="隐藏右侧记忆区" aria-label="隐藏右侧记忆区">
+                    <i data-lucide="eye-off"></i>
+                  </button>
+                </header>
+                <div class="aside-bookmarks" id="readerAsideBookmarks"></div>
+              </aside>
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <div class="selection-popover" id="selectionPopover" hidden>
+      <div class="popover-titlebar" id="popoverDragHandle">
+        <div>
+          <strong id="selectionKind">选中文本</strong>
+          <span id="popoverHint">拖动标题移动，右下角调大小</span>
+        </div>
+        <div class="popover-title-actions">
+          <label>
+            <span>翻译源</span>
+            <select id="translatorSelect">
+              <option value="local">本地</option>
+              <option value="google" selected>Google</option>
+              <option value="baidu">百度</option>
+            </select>
+          </label>
+          <button type="button" id="dockPopoverBtn" title="固定到右侧" aria-label="固定到右侧">
+            <i data-lucide="panel-right"></i>
+          </button>
+          <button type="button" id="collapsePopoverBtn" title="收起右侧浮框" aria-label="收起右侧浮框">
+            <i data-lucide="chevrons-right"></i>
+          </button>
+          <button type="button" id="pinPopoverBtn" title="固定面板" aria-label="固定面板">
+            <i data-lucide="pin"></i>
+          </button>
+          <button type="button" id="closePopoverBtn" title="关闭" aria-label="关闭">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+      </div>
+      <div class="popover-actions">
+        <button type="button" id="translateSelectionBtn" title="翻译">
+          <i data-lucide="languages"></i>
+          翻译
+        </button>
+        <button type="button" id="readSelectionBtn" title="朗读">
+          <i data-lucide="volume-2"></i>
+          朗读
+        </button>
+        <button type="button" id="bookmarkSelectionBtn" title="加入书签">
+          <i data-lucide="bookmark-plus"></i>
+          书签
+        </button>
+        <button type="button" id="boldSelectionBtn" title="加粗">
+          <i data-lucide="bold"></i>
+          加粗
+        </button>
+      </div>
+      <section class="selection-practice" aria-label="跟读评分">
+        <div class="practice-layer compact-target">
+          <div class="practice-head">
+            <strong>跟读内容</strong>
+            <div class="practice-mini-actions">
+              <button class="icon-button" type="button" id="popoverReadPracticeBtn" title="朗读跟读内容" aria-label="朗读跟读内容">
+                <i data-lucide="volume-2"></i>
+              </button>
+              <button class="icon-button" type="button" id="popoverResetScoreBtn" title="重置评分" aria-label="重置评分">
+                <i data-lucide="rotate-ccw"></i>
+              </button>
+            </div>
+          </div>
+          <div class="practice-target" id="popoverPracticeTargetText">选中文章中的一句或一段开始跟读。</div>
+        </div>
+        <div class="practice-layer">
+          <div class="practice-head">
+            <strong>跟读语音</strong>
+            <div class="recorder-row">
+              <button type="button" id="popoverRecordBtn">
+                <i data-lucide="mic"></i>
+                <span>跟读</span>
+              </button>
+              <button type="button" id="popoverRecordStopBtn" disabled>
+                <i data-lucide="mic-off"></i>
+                <span>停止</span>
+              </button>
+              <button type="button" id="popoverScoreTypedBtn">
+                <i data-lucide="badge-check"></i>
+                <span>评分</span>
+              </button>
+              <button type="button" id="popoverStopScoreBtn">
+                <i data-lucide="square"></i>
+                <span>终止</span>
+              </button>
+            </div>
+          </div>
+          <textarea id="popoverTranscriptInput" rows="2" placeholder="语音识别结果会出现在这里，也可以手动输入后评分。"></textarea>
+          <div class="score-output" id="popoverScoreOutput"></div>
+        </div>
+      </section>
+      <div class="word-card" id="wordCard"></div>
+      <div class="phonetic-list" id="phoneticList"></div>
+      <div class="selection-preview" id="selectionPreview"></div>
+      <div class="translation-output" id="translationOutput"></div>
+      <span class="popover-resize-handle resize-nw" data-popover-resize="nw" aria-hidden="true"></span>
+      <span class="popover-resize-handle resize-ne" data-popover-resize="ne" aria-hidden="true"></span>
+      <span class="popover-resize-handle resize-sw" data-popover-resize="sw" aria-hidden="true"></span>
+      <span class="popover-resize-handle resize-se" data-popover-resize="se" aria-hidden="true"></span>
+    </div>
+
+    <div class="cursor-tooltip" id="cursorTooltip" hidden></div>
+    <button class="reader-restore-button" id="topbarShowBtn" type="button" hidden aria-label="显示顶部功能栏">
+      <i data-lucide="sliders-horizontal"></i>
+      <span>工具</span>
+    </button>
+    <div class="reading-dock" id="readingDock" hidden aria-label="隐藏功能区恢复">
+      <button type="button" id="dockSidebarBtn" title="显示书架" aria-label="显示书架">
+        <i data-lucide="panel-left"></i><span>书架</span>
+      </button>
+      <button type="button" id="dockTopbarBtn" title="显示顶部功能栏" aria-label="显示顶部功能栏">
+        <i data-lucide="sliders-horizontal"></i><span>顶部</span>
+      </button>
+      <button type="button" id="dockToolbarBtn" title="显示文章工具栏" aria-label="显示文章工具栏">
+        <i data-lucide="settings-2"></i><span>工具</span>
+      </button>
+      <button type="button" id="dockTocBtn" title="显示目录" aria-label="显示目录">
+        <i data-lucide="list-tree"></i><span>目录</span>
+      </button>
+      <button type="button" id="dockAsideBtn" title="显示书签与记忆" aria-label="显示书签与记忆">
+        <i data-lucide="bookmark"></i><span>记忆</span>
+      </button>
+      <button type="button" id="dockExitBtn" title="退出沉浸" aria-label="退出沉浸">
+        <i data-lucide="minimize"></i><span>退出</span>
+      </button>
+      <button type="button" id="dockCollapseBtn" title="隐藏恢复条" aria-label="隐藏恢复条">
+        <i data-lucide="chevron-down"></i><span>隐藏</span>
+      </button>
+    </div>
+    <button class="dock-show-button" id="dockShowBtn" type="button" hidden aria-label="显示恢复条">
+      <i data-lucide="chevron-up"></i>
+    </button>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
