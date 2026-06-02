@@ -6,6 +6,13 @@ const els = {
   coverInput: $("#coverInput"),
   dropZone: $("#dropZone"),
   docList: $("#docList"),
+  librarySectionLabel: $("#librarySectionLabel"),
+  vocabList: $("#vocabList"),
+  clearVocabBtn: $("#clearVocabBtn"),
+  onlineArticleList: $("#onlineArticleList"),
+  refreshBbcBtn: $("#refreshBbcBtn"),
+  dailyTaskList: $("#dailyTaskList"),
+  refreshDailyTaskBtn: $("#refreshDailyTaskBtn"),
   sampleBtn: $("#sampleBtn"),
   clearLibraryBtn: $("#clearLibraryBtn"),
   supportStatus: $("#supportStatus"),
@@ -18,6 +25,7 @@ const els = {
   topbarResizer: $("#topbarResizer"),
   immersiveToggleBtn: $("#immersiveToggleBtn"),
   readerTopbar: $(".reader-topbar"),
+  homePageBtn: $("#homePageBtn"),
   docFormat: $("#docFormat"),
   docTitle: $("#docTitle"),
   docStats: $("#docStats"),
@@ -52,9 +60,13 @@ const els = {
   voiceSelect: $("#voiceSelect"),
   voiceStyleSelect: $("#voiceStyleSelect"),
   fontFamilySelect: $("#fontFamilySelect"),
+  chineseFontSelect: $("#chineseFontSelect"),
   formatSelect: $("#formatSelect"),
   fontSizeRange: $("#fontSizeRange"),
   fontSizeValue: $("#fontSizeValue"),
+  lineHeightRange: $("#lineHeightRange"),
+  lineHeightValue: $("#lineHeightValue"),
+  readerBgSelect: $("#readerBgSelect"),
   pageModeSelect: $("#pageModeSelect"),
   playUsVoiceBtn: $("#playUsVoiceBtn"),
   playUkVoiceBtn: $("#playUkVoiceBtn"),
@@ -78,6 +90,7 @@ const els = {
   popoverHint: $("#popoverHint"),
   translatorSelect: $("#translatorSelect"),
   dockPopoverBtn: $("#dockPopoverBtn"),
+  dockLeftPopoverBtn: $("#dockLeftPopoverBtn"),
   collapsePopoverBtn: $("#collapsePopoverBtn"),
   pinPopoverBtn: $("#pinPopoverBtn"),
   closePopoverBtn: $("#closePopoverBtn"),
@@ -88,7 +101,7 @@ const els = {
   translateSelectionBtn: $("#translateSelectionBtn"),
   readSelectionBtn: $("#readSelectionBtn"),
   bookmarkSelectionBtn: $("#bookmarkSelectionBtn"),
-  boldSelectionBtn: $("#boldSelectionBtn"),
+  vocabSelectionBtn: $("#vocabSelectionBtn"),
   recordBtn: $("#popoverRecordBtn") || $("#recordBtn"),
   recordStopBtn: $("#popoverRecordStopBtn") || $("#recordStopBtn"),
   practiceTargetText: $("#popoverPracticeTargetText") || $("#practiceTargetText"),
@@ -109,6 +122,9 @@ const els = {
 const STORAGE_KEY = "lingua-reader-docs-v2";
 const OLD_STORAGE_KEY = "lingua-reader-docs-v1";
 const PREF_KEY = "lingua-reader-prefs-v2";
+const VOCAB_KEY = "lingua-reader-vocab-v1";
+const DAILY_TASK_KEY = "lingua-reader-daily-task-v1";
+const BBC_CACHE_KEY = "lingua-reader-bbc-cache-v1";
 const MAX_STORED_TEXT = 1_400_000;
 
 const sampleText = `The Hidden Value of Slow Reading
@@ -120,6 +136,45 @@ When you read a paragraph aloud, your mouth discovers patterns that your eyes ma
 Technology can make this practice more personal. A reader can listen to a sentence in different voices, repeat it at a comfortable speed, and compare the spoken result with the original text. The best feedback is specific: which words were missed, which sounds need attention, and which sentence should be repeated slowly.
 
 The goal is not to sound perfect after one attempt. The goal is to build a small daily loop: read, listen, imitate, receive feedback, and talk about the ideas in the text. Over time, that loop turns reading into conversation and conversation into memory.`;
+
+const BBC_RSS_URL = "https://feeds.bbci.co.uk/news/world/rss.xml";
+const BBC_PROXY_URL = "https://api.allorigins.win/raw?url=";
+
+const fallbackOnlineArticles = [
+  {
+    title: "BBC News Reading Pack: Global Trade",
+    summary:
+      "Countries are trying to balance growth, security, and public trust as new trade rules reshape how companies move goods across borders.",
+    link: "https://www.bbc.com/news/world",
+  },
+  {
+    title: "BBC News Reading Pack: Climate Adaptation",
+    summary:
+      "Cities are redesigning transport, water systems, and public spaces as hotter weather and heavier storms become harder to ignore.",
+    link: "https://www.bbc.com/news/science_and_environment",
+  },
+  {
+    title: "BBC News Reading Pack: Technology and Learning",
+    summary:
+      "Schools and families are debating how digital tools can support attention, language practice, and independent thinking without replacing human guidance.",
+    link: "https://www.bbc.com/news/technology",
+  },
+];
+
+const bbcSentenceBank = [
+  "As governments look for ways to protect consumers from rising costs, economists warn that short-term relief can sometimes create longer-term pressure on public finances.",
+  "Researchers say that the most successful climate plans combine national targets with practical local decisions about transport, housing, water use, and emergency preparation.",
+  "The company said it would review the safety of the product after customers reported that a software update had changed how the device responded in everyday situations.",
+  "Health officials have urged people to check information from trusted sources, especially when dramatic claims spread quickly on social media before experts have time to respond.",
+  "Analysts believe the result may influence future negotiations because both sides now face pressure to show that any agreement can deliver visible benefits for ordinary families.",
+  "Teachers involved in the programme said students made faster progress when reading practice was linked to discussion, pronunciation feedback, and small daily goals.",
+  "Although the new figures suggest that inflation is slowing, many households still feel under pressure because food, rent, and energy bills remain higher than they were several years ago.",
+  "The report argues that artificial intelligence will change many office jobs, but it also stresses that communication, judgement, and specialist knowledge will become even more valuable.",
+  "Officials said the railway project could reduce journey times and support regional growth, while critics questioned whether the environmental costs had been fully considered.",
+  "Scientists monitoring the region say the latest data is important because it shows how quickly natural systems can change when heat, rainfall, and human activity combine.",
+  "Local residents told reporters that they wanted investment and new jobs, but they also wanted stronger guarantees that historic buildings and public green spaces would be protected.",
+  "The court's decision is expected to be closely watched by other countries that are trying to update their laws for a digital economy.",
+];
 
 const stopWords = new Set(
   "a an and are as at be been being but by can could did do does for from had has have he her his i if in into is it its may more most not of on or our she should than that the their them then there these they this those to was we were what when where which who will with would you your".split(
@@ -600,6 +655,11 @@ for (const [word, ipa] of Object.entries(supplementalPhonetics)) {
 
 const state = {
   docs: [],
+  vocab: [],
+  onlineArticles: [],
+  onlineLastRefresh: "",
+  dailyTasks: null,
+  activeTaskIndex: null,
   currentId: null,
   currentDoc: null,
   paragraphs: [],
@@ -609,11 +669,15 @@ const state = {
   voices: [],
   pdfjs: null,
   recognition: null,
+  recognitionActive: false,
+  recognitionStopRequested: false,
+  recognitionRestartCount: 0,
   speechQueue: [],
   speechTimer: 0,
   isPaused: false,
   isPopoverPinned: false,
   isPopoverDocked: false,
+  popoverDockSide: "right",
   isPopoverCollapsed: false,
   isResizingPopover: false,
   popoverPosition: null,
@@ -662,6 +726,9 @@ function init() {
   loadPrefs();
   bindEvents();
   loadDocs();
+  loadVocabulary();
+  loadDailyTasks();
+  loadBbcCache();
 
   if (state.docs.length === 0) {
     const sampleDoc = makeDoc("示例文章", "DEMO", sampleText);
@@ -671,12 +738,16 @@ function init() {
   }
 
   renderDocList();
+  renderVocabularyList();
+  renderDailyTasks();
+  renderOnlineArticles();
   enterShelfMode();
   loadVoices();
   updateSupportStatus();
   updateRangeLabel();
   refreshIcons();
   registerServiceWorker();
+  scheduleBbcRefresh();
 }
 
 function bindEvents() {
@@ -735,6 +806,20 @@ function bindEvents() {
     enterShelfMode();
   });
 
+  els.clearVocabBtn?.addEventListener("click", () => {
+    if (!state.vocab.length) return;
+    if (!confirm("清空生词本？")) return;
+    state.vocab = [];
+    syncVocabularyNotebookDoc();
+    saveVocabulary();
+    renderVocabularyList();
+    renderDocList();
+    showToast("生词本已清空");
+  });
+
+  els.refreshBbcBtn?.addEventListener("click", () => refreshBbcArticles({ force: true }));
+  els.refreshDailyTaskBtn?.addEventListener("click", refreshDailyTasks);
+
   els.toggleSidebarBtn.addEventListener("click", () => {
     els.libraryPane.classList.toggle("open");
   });
@@ -744,6 +829,7 @@ function bindEvents() {
   els.hideSidebarBtn.addEventListener("click", () => setPanelHidden("sidebar", true, { announce: true }));
   els.topbarHideBtn.addEventListener("click", () => setPanelHidden("topbar", true, { announce: true }));
   els.topbarShowBtn.addEventListener("click", () => setMobileChromeHidden(false, { announce: true }));
+  els.homePageBtn?.addEventListener("click", returnToHomePage);
   els.immersiveToggleBtn.addEventListener("click", enterImmersiveMode);
   els.toolbarHideBtn.addEventListener("click", () => setPanelHidden("toolbar", true, { announce: true }));
   els.hideTocBtn.addEventListener("click", () => setPanelHidden("toc", true, { announce: true }));
@@ -800,12 +886,24 @@ function bindEvents() {
     setReaderFont(els.fontFamilySelect.value);
     savePrefs();
   });
+  els.chineseFontSelect?.addEventListener("change", () => {
+    setChineseReaderFont(els.chineseFontSelect.value);
+    savePrefs();
+  });
   els.formatSelect?.addEventListener("change", () => {
     setReaderFormat(els.formatSelect.value);
     savePrefs();
   });
   els.fontSizeRange?.addEventListener("input", () => {
     setReadingZoom(els.fontSizeRange.value);
+    savePrefs();
+  });
+  els.lineHeightRange?.addEventListener("input", () => {
+    setReaderLineHeight(els.lineHeightRange.value);
+    savePrefs();
+  });
+  els.readerBgSelect?.addEventListener("change", () => {
+    setReaderBackground(els.readerBgSelect.value);
     savePrefs();
   });
   els.pageModeSelect?.addEventListener("change", () => {
@@ -842,7 +940,8 @@ function bindEvents() {
   document.addEventListener("pointerup", stopPopoverDrag);
   document.addEventListener("pointerup", stopWordDrag);
   document.addEventListener("pointercancel", cancelWordDrag);
-  els.dockPopoverBtn?.addEventListener("click", togglePopoverDock);
+  els.dockPopoverBtn?.addEventListener("click", () => togglePopoverDock("right"));
+  els.dockLeftPopoverBtn?.addEventListener("click", () => togglePopoverDock("left"));
   els.collapsePopoverBtn?.addEventListener("click", togglePopoverCollapse);
   els.pinPopoverBtn.addEventListener("click", togglePopoverPin);
   els.closePopoverBtn.addEventListener("click", () => hidePopover(true));
@@ -853,7 +952,7 @@ function bindEvents() {
   els.translateSelectionBtn.addEventListener("click", translateSelectedText);
   els.readSelectionBtn.addEventListener("click", () => speakNatural(state.selectedText));
   els.bookmarkSelectionBtn.addEventListener("click", bookmarkSelectedText);
-  els.boldSelectionBtn.addEventListener("click", boldSelectedText);
+  els.vocabSelectionBtn?.addEventListener("click", addSelectionToVocabulary);
   document.addEventListener("click", handlePhoneticClick);
 
   els.speakArticleBtn.addEventListener("click", () => speakNatural(state.articleText));
@@ -1040,20 +1139,35 @@ function loadPrefs() {
       els.fontFamilySelect.value = prefs.readerFont;
       setReaderFont(prefs.readerFont);
     }
+    if (prefs.chineseFont) {
+      els.chineseFontSelect.value = prefs.chineseFont;
+      setChineseReaderFont(prefs.chineseFont);
+    }
     if (prefs.readerFormat) {
       els.formatSelect.value = prefs.readerFormat;
       setReaderFormat(prefs.readerFormat);
+    }
+    if (prefs.readerLineHeight) {
+      setReaderLineHeight(prefs.readerLineHeight);
+    }
+    if (prefs.readerBackground) {
+      els.readerBgSelect.value = prefs.readerBackground;
+      setReaderBackground(prefs.readerBackground);
     }
     if (prefs.pageMode) {
       els.pageModeSelect.value = prefs.pageMode;
       setPageMode(prefs.pageMode);
     }
     if (prefs.sidebarWidth) setSidebarWidth(prefs.sidebarWidth);
-    if (prefs.topbarHeight) setTopbarHeight(prefs.topbarHeight);
+    if (prefs.topbarHeight) {
+      const savedTopbar = parseInt(prefs.topbarHeight, 10) || 178;
+      setTopbarHeight(`${Math.max(savedTopbar, 178)}px`);
+    }
     if (prefs.tocWidth) setTocWidth(prefs.tocWidth);
     if (prefs.asideWidth) setAsideWidth(prefs.asideWidth);
     if (typeof prefs.popoverPinned === "boolean") state.isPopoverPinned = prefs.popoverPinned;
     if (typeof prefs.popoverDocked === "boolean") state.isPopoverDocked = prefs.popoverDocked;
+    if (prefs.popoverDockSide === "left" || prefs.popoverDockSide === "right") state.popoverDockSide = prefs.popoverDockSide;
     if (typeof prefs.popoverCollapsed === "boolean") state.isPopoverCollapsed = prefs.popoverCollapsed;
     if (typeof prefs.popoverDockTop === "number") state.popoverDockTop = prefs.popoverDockTop;
     if (prefs.popoverDockSize) state.popoverDockSize = prefs.popoverDockSize;
@@ -1095,8 +1209,11 @@ function savePrefs() {
       translator: els.translatorSelect.value,
       readerWidth: els.readingWidthRange.value,
       readingZoom: els.readingZoomRange.value,
-      readerFont: els.fontFamilySelect?.value || "serif",
+      readerFont: els.fontFamilySelect?.value || "literary",
+      chineseFont: els.chineseFontSelect?.value || "system",
       readerFormat: els.formatSelect?.value || "comfortable",
+      readerLineHeight: els.lineHeightRange?.value || "1.7",
+      readerBackground: els.readerBgSelect?.value || "paper",
       pageMode: els.pageModeSelect?.value || "scroll",
       sidebarWidth: getComputedStyle(document.documentElement).getPropertyValue("--sidebar-width").trim(),
       topbarHeight: getComputedStyle(document.documentElement).getPropertyValue("--topbar-max-height").trim(),
@@ -1104,6 +1221,7 @@ function savePrefs() {
       asideWidth: getComputedStyle(document.documentElement).getPropertyValue("--aside-width").trim(),
       popoverPinned: state.isPopoverPinned,
       popoverDocked: state.isPopoverDocked,
+      popoverDockSide: state.popoverDockSide,
       popoverCollapsed: state.isPopoverCollapsed,
       popoverDockTop: state.popoverDockTop,
       popoverDockSize: state.popoverDockSize,
@@ -1210,6 +1328,23 @@ function panelLabel(panel) {
   }[panel];
 }
 
+function returnToHomePage() {
+  persistReadingProgressNow();
+  state.selectedText = "";
+  state.selectionRange = null;
+  state.activeTaskIndex = null;
+  els.libraryPane.classList.remove("open");
+  setMobileChromeHidden(false, { persist: false });
+  enterShelfMode();
+  renderDocList();
+  renderVocabularyList();
+  renderDailyTasks();
+  renderOnlineArticles();
+  syncPanelVisibility();
+  savePrefs();
+  showToast("已返回首页");
+}
+
 function enterShelfMode() {
   state.shelfMode = true;
   document.body.classList.add("shelf-mode");
@@ -1227,8 +1362,10 @@ function exitShelfMode() {
 
 function renderDocList() {
   els.docList.textContent = "";
+  if (els.librarySectionLabel) els.librarySectionLabel.textContent = state.shelfMode ? "书架" : "当前文章";
+  const docsToShow = state.shelfMode ? state.docs : state.currentDoc ? [state.currentDoc] : [];
 
-  if (state.docs.length === 0) {
+  if (docsToShow.length === 0) {
     const empty = document.createElement("div");
     empty.className = "doc-card";
     empty.innerHTML = "<strong>暂无文件</strong><span>导入或打开示例文章</span>";
@@ -1236,7 +1373,7 @@ function renderDocList() {
     return;
   }
 
-  for (const doc of state.docs) {
+  for (const doc of docsToShow) {
     const card = document.createElement("article");
     card.className = `doc-card${doc.id === state.currentId ? " active" : ""}${doc.coverSrc ? " has-cover" : ""}`;
     if (doc.coverSrc) {
@@ -1272,11 +1409,383 @@ function renderDocList() {
       els.coverInput?.click();
     });
 
-    actions.append(renameButton, coverButton);
-    card.append(openButton, actions);
+    if (state.shelfMode) {
+      actions.append(renameButton, coverButton);
+      card.append(openButton, actions);
+    } else {
+      card.append(openButton);
+    }
     els.docList.append(card);
   }
   refreshIcons();
+}
+
+function loadVocabulary() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(VOCAB_KEY) || "[]");
+    state.vocab = Array.isArray(saved)
+      ? saved
+          .filter((item) => item?.text)
+          .map((item) => ({
+            id: item.id || crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            text: normalizeInlineText(tokenizeWords(item.text)[0] || item.text),
+            meaning: normalizeInlineText(item.meaning || ""),
+            phonetic: item.phonetic || null,
+            createdAt: item.createdAt || new Date().toISOString(),
+            updatedAt: item.updatedAt || item.createdAt || new Date().toISOString(),
+          }))
+          .filter((item) => isSingleWord(item.text))
+      : [];
+  } catch {
+    state.vocab = [];
+  }
+  syncVocabularyNotebookDoc({ save: false });
+}
+
+function saveVocabulary() {
+  localStorage.setItem(VOCAB_KEY, JSON.stringify(state.vocab.slice(0, 500)));
+}
+
+function renderVocabularyList() {
+  if (!els.vocabList) return;
+  els.vocabList.textContent = "";
+  if (!state.vocab.length) {
+    const empty = document.createElement("div");
+    empty.className = "mini-empty";
+    empty.textContent = "选中单词或短语后，可在浮框加入生词本。";
+    els.vocabList.append(empty);
+    return;
+  }
+
+  for (const item of state.vocab.slice(0, 24)) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "vocab-item";
+    const phonetic = item.phonetic ? preferredPhonetic(item.phonetic) : "";
+    button.innerHTML = `
+      <strong>${escapeHtml(item.text)}</strong>
+      <span>${escapeHtml([phonetic, item.meaning].filter(Boolean).join("  "))}</span>
+    `;
+    button.addEventListener("click", () => openVocabularyItem(item.id));
+    els.vocabList.append(button);
+  }
+  refreshIcons();
+}
+
+function addSelectionToVocabulary() {
+  const text = normalizeInlineText(state.selectedText || "");
+  if (!isSingleWord(text)) {
+    showToast("生词本用于速记，请只选中单个英文单词。");
+    return;
+  }
+
+  const word = tokenizeWords(text)[0];
+  const phonetic = getPhonetic(word);
+  const meaning = getWordMeaning(word);
+  const existing = state.vocab.find((item) => item.text.toLowerCase() === word.toLowerCase());
+  const now = new Date().toISOString();
+  const entry = existing || {
+    id: crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    text: word,
+    createdAt: now,
+  };
+
+  Object.assign(entry, {
+    text: word,
+    meaning: meaning || "待补充",
+    phonetic,
+    updatedAt: now,
+  });
+
+  if (!existing) state.vocab.unshift(entry);
+  syncVocabularyNotebookDoc();
+  saveVocabulary();
+  saveDocs();
+  renderVocabularyList();
+  renderDocList();
+  showToast(existing ? "这个单词已在生词本中" : "已加入生词速记本");
+}
+
+function syncVocabularyNotebookDoc(options = {}) {
+  const { save = true } = options;
+  state.docs = state.docs.filter((doc) => !(doc.format === "VOCAB" && doc.vocabId));
+  let doc = state.docs.find((item) => item.format === "VOCAB" && (item.vocabNotebook || item.title === "生词速记本"));
+  if (state.vocab.length === 0) {
+    if (doc) state.docs = state.docs.filter((item) => item.id !== doc.id);
+    if (save) saveDocs();
+    return null;
+  }
+
+  const text = vocabularyNotebookText();
+  if (!doc) {
+    doc = makeDoc("生词速记本", "VOCAB", text);
+    doc.vocabNotebook = true;
+    state.docs.unshift(doc);
+  } else {
+    doc.title = "生词速记本";
+    doc.text = normalizeDocumentText(text);
+    doc.vocabNotebook = true;
+  }
+  if (save) saveDocs();
+  return doc;
+}
+
+function vocabularyNotebookText() {
+  return state.vocab
+    .map((entry, index) => {
+      const phonetic = entry.phonetic ? preferredPhonetic(entry.phonetic) : "";
+      const meaning = entry.meaning || "待补充";
+      return `${index + 1}. ${entry.text}${phonetic ? `  ${phonetic}` : ""}  ${meaning}`;
+    })
+    .join("\n");
+}
+
+function openVocabularyItem() {
+  const doc = syncVocabularyNotebookDoc();
+  if (!doc) return;
+  renderDocList();
+  selectDoc(doc.id);
+  els.libraryPane.classList.remove("open");
+}
+
+function loadDailyTasks() {
+  try {
+    state.dailyTasks = JSON.parse(localStorage.getItem(DAILY_TASK_KEY) || "null");
+  } catch {
+    state.dailyTasks = null;
+  }
+  if (!state.dailyTasks || state.dailyTasks.date !== todayKey()) {
+    state.dailyTasks = makeDailyTasks(todayKey());
+    saveDailyTasks();
+  }
+}
+
+function saveDailyTasks() {
+  localStorage.setItem(DAILY_TASK_KEY, JSON.stringify(state.dailyTasks));
+}
+
+function makeDailyTasks(dateKey, seed = dateKey) {
+  const offset = seededNumber(seed);
+  const sentences = [];
+  for (let index = 0; index < 3; index += 1) {
+    sentences.push(bbcSentenceBank[(offset + index * 4) % bbcSentenceBank.length]);
+  }
+  return { date: dateKey, sentences, scores: [0, 0, 0], completed: [false, false, false] };
+}
+
+function renderDailyTasks() {
+  if (!els.dailyTaskList || !state.dailyTasks) return;
+  els.dailyTaskList.textContent = "";
+  state.dailyTasks.sentences.forEach((sentence, index) => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = `daily-task-item${state.dailyTasks.completed[index] ? " complete" : ""}`;
+    item.innerHTML = `
+      <strong>Task ${index + 1} <span>${state.dailyTasks.scores[index] || 0}/100</span></strong>
+      <span>${escapeHtml(shorten(sentence, 150))}</span>
+    `;
+    item.addEventListener("click", () => startDailyTask(index));
+    els.dailyTaskList.append(item);
+  });
+
+  const canRefresh = state.dailyTasks.completed.every(Boolean);
+  if (els.refreshDailyTaskBtn) {
+    els.refreshDailyTaskBtn.disabled = !canRefresh;
+    els.refreshDailyTaskBtn.title = canRefresh ? "刷新每日任务" : "3 个任务都达到 90 分后才能刷新";
+  }
+  refreshIcons();
+}
+
+function startDailyTask(index) {
+  const sentence = state.dailyTasks?.sentences?.[index];
+  if (!sentence) return;
+  state.activeTaskIndex = index;
+  state.selectedText = sentence;
+  state.selectionRange = null;
+  state.isPopoverCollapsed = false;
+  renderSelectionDetails({ autoTranslate: true });
+  showPopoverAtCenter();
+  ensurePracticeVisible();
+  readPracticeTarget();
+}
+
+function refreshDailyTasks() {
+  if (!state.dailyTasks?.completed?.every(Boolean)) {
+    showToast("先把 3 个每日任务都跟读到 90 分以上。");
+    renderDailyTasks();
+    return;
+  }
+  state.dailyTasks = makeDailyTasks(todayKey(), `${todayKey()}-${Date.now()}`);
+  saveDailyTasks();
+  renderDailyTasks();
+  showToast("每日任务已刷新。");
+}
+
+function updateDailyTaskScore(score) {
+  if (state.activeTaskIndex === null || !state.dailyTasks) return;
+  const index = state.activeTaskIndex;
+  state.dailyTasks.scores[index] = Math.max(state.dailyTasks.scores[index] || 0, score);
+  if (score >= 90) state.dailyTasks.completed[index] = true;
+  saveDailyTasks();
+  renderDailyTasks();
+}
+
+function todayKey() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+function seededNumber(seed) {
+  return Array.from(String(seed)).reduce((total, char) => (total * 31 + char.charCodeAt(0)) >>> 0, 17);
+}
+
+function renderOnlineArticles() {
+  if (!els.onlineArticleList) return;
+  const articles = state.onlineArticles.length ? state.onlineArticles : fallbackOnlineArticles;
+  els.onlineArticleList.textContent = "";
+  for (const article of articles.slice(0, 8)) {
+    const item = document.createElement("article");
+    item.className = "online-item";
+    item.innerHTML = `
+      <button type="button" class="online-open">
+        <strong>${escapeHtml(article.title)}</strong>
+        <span>${escapeHtml(shorten(article.summary || "", 140))}</span>
+      </button>
+      <a href="${escapeHtml(article.link || "https://www.bbc.com/news")}" target="_blank" rel="noopener noreferrer">BBC</a>
+    `;
+    $(".online-open", item).addEventListener("click", () => importOnlineArticle(article));
+    els.onlineArticleList.append(item);
+  }
+  refreshIcons();
+}
+
+function loadBbcCache() {
+  try {
+    const cache = JSON.parse(localStorage.getItem(BBC_CACHE_KEY) || "null");
+    if (cache?.date && Array.isArray(cache.articles) && cache.articles.length) {
+      state.onlineArticles = cache.articles;
+      state.onlineLastRefresh = cache.date;
+    }
+  } catch {
+    state.onlineArticles = [];
+    state.onlineLastRefresh = "";
+  }
+}
+
+function saveBbcCache() {
+  localStorage.setItem(
+    BBC_CACHE_KEY,
+    JSON.stringify({
+      date: todayKey(),
+      savedAt: new Date().toISOString(),
+      articles: state.onlineArticles.slice(0, 12),
+    }),
+  );
+}
+
+function scheduleBbcRefresh() {
+  const stale = state.onlineLastRefresh !== todayKey() || state.onlineArticles.length === 0;
+  void refreshBbcArticles({ silent: true, force: stale });
+  window.setInterval(() => {
+    if (document.body.classList.contains("shelf-mode")) void refreshBbcArticles({ silent: true, force: true });
+  }, 4 * 60 * 60 * 1000);
+}
+
+async function refreshBbcArticles(options = {}) {
+  const { silent = false, force = false } = options;
+  if (!force && state.onlineLastRefresh === todayKey() && state.onlineArticles.length) {
+    renderOnlineArticles();
+    return;
+  }
+  if (!silent) showToast("正在刷新 BBC 在线文章...");
+  try {
+    const articles = await fetchBbcArticles();
+    if (articles.length) {
+      state.onlineArticles = articles;
+      state.onlineLastRefresh = todayKey();
+      saveBbcCache();
+      renderOnlineArticles();
+      if (!silent) showToast("BBC 新闻已刷新");
+      return;
+    }
+    throw new Error("No BBC articles parsed");
+  } catch (error) {
+    if (state.onlineArticles.length === 0) state.onlineArticles = fallbackOnlineArticles;
+    renderOnlineArticles();
+    if (!silent) showToast(`BBC 自动刷新失败，已保留当前列表：${error.message || "网络限制"}`);
+  }
+}
+
+async function fetchBbcArticles() {
+  const sources = [
+    { type: "rss", url: BBC_RSS_URL },
+    { type: "rss", url: `${BBC_PROXY_URL}${encodeURIComponent(BBC_RSS_URL)}` },
+    { type: "json", url: `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(BBC_RSS_URL)}` },
+  ];
+
+  for (const source of sources) {
+    try {
+      const response = await fetch(source.url, { cache: "no-store", mode: "cors" });
+      if (!response.ok) continue;
+      if (source.type === "json") {
+        const data = await response.json();
+        const articles = parseBbcJson(data);
+        if (articles.length) return articles;
+      } else {
+        const rss = await response.text();
+        const articles = parseBbcRss(rss);
+        if (articles.length) return articles;
+      }
+    } catch {
+      // Try the next source.
+    }
+  }
+  return [];
+}
+
+function parseBbcRss(rss) {
+  const doc = new DOMParser().parseFromString(rss, "application/xml");
+  return Array.from(doc.querySelectorAll("item"))
+    .slice(0, 10)
+    .map((item) => ({
+      title: normalizeInlineText(item.querySelector("title")?.textContent || ""),
+      summary: normalizeInlineText(htmlToText(item.querySelector("description")?.textContent || "")),
+      link: normalizeInlineText(item.querySelector("link")?.textContent || "https://www.bbc.com/news"),
+    }))
+    .filter((item) => item.title);
+}
+
+function parseBbcJson(data) {
+  return (Array.isArray(data?.items) ? data.items : [])
+    .slice(0, 10)
+    .map((item) => ({
+      title: normalizeInlineText(item.title || ""),
+      summary: normalizeInlineText(htmlToText(item.description || item.content || "")),
+      link: normalizeInlineText(item.link || "https://www.bbc.com/news"),
+    }))
+    .filter((item) => item.title);
+}
+
+function importOnlineArticle(article) {
+  const text = normalizeDocumentText(
+    [
+      article.title,
+      article.summary,
+      article.link ? `Source: ${article.link}` : "",
+      "Open the BBC source link for the full report, then use this reader for pronunciation, translation, bookmarks, and daily review.",
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+  );
+  const doc = makeDoc(article.title, "BBC", { text });
+  state.docs.unshift(doc);
+  state.currentId = doc.id;
+  saveDocs();
+  renderDocList();
+  selectDoc(doc.id);
+  showToast("已加入书架，可开始阅读。");
 }
 
 function renameDoc(id) {
@@ -1980,6 +2489,7 @@ function getSelectionInsideReader() {
 }
 
 function setSelection(range, text) {
+  state.activeTaskIndex = null;
   state.selectionRange = range.cloneRange();
   state.selectedText = normalizeInlineText(text);
   renderSelectionDetails({ autoTranslate: isSingleWord(state.selectedText) });
@@ -2050,6 +2560,27 @@ function showPopoverForRange(range) {
   movePopoverTo(left, top);
 }
 
+function showPopoverAtCenter() {
+  if (!state.selectedText) return;
+  els.selectionPopover.hidden = false;
+  updatePopoverModeState();
+  if (state.isPopoverDocked) {
+    positionDockedPopover();
+    return;
+  }
+  const rect = els.selectionPopover.getBoundingClientRect();
+  const left = Math.max(12, window.innerWidth - rect.width - 18);
+  const top = Math.max(12, Math.min(window.innerHeight * 0.18, window.innerHeight - rect.height - 12));
+  movePopoverTo(left, top);
+}
+
+function ensurePracticeVisible() {
+  window.setTimeout(() => {
+    if (!els.selectionPopover || els.selectionPopover.hidden) return;
+    els.selectionPopover.scrollTop = els.selectionPopover.scrollHeight;
+  }, 120);
+}
+
 function hidePopover(force = false) {
   if (state.isPopoverDocked && !force) return;
   if (state.isPopoverPinned && !force) return;
@@ -2066,8 +2597,13 @@ function positionDockedPopover() {
   const height = state.isPopoverCollapsed ? 220 : clamp(savedSize.height || rect.height || availableHeight, 260, availableHeight);
   const top = clamp(state.popoverDockTop ?? bounds.top, bounds.top, Math.max(bounds.top, bounds.bottom - height));
 
-  els.selectionPopover.style.left = "";
-  els.selectionPopover.style.right = "0px";
+  if (state.popoverDockSide === "left") {
+    els.selectionPopover.style.left = "0px";
+    els.selectionPopover.style.right = "";
+  } else {
+    els.selectionPopover.style.left = "";
+    els.selectionPopover.style.right = "0px";
+  }
   els.selectionPopover.style.top = `${top}px`;
   els.selectionPopover.style.width = `${width}px`;
   els.selectionPopover.style.height = `${height}px`;
@@ -2294,7 +2830,7 @@ function startTopbarResize(event) {
 function resizeTopbar(event) {
   if (!state.isResizingTopbar) return;
   const top = els.readerTopbar?.getBoundingClientRect?.().top ?? 0;
-  setTopbarHeight(`${clamp(event.clientY - top, 58, 260)}px`);
+  setTopbarHeight(`${clamp(event.clientY - top, 58, 300)}px`);
 }
 
 function stopTopbarResize() {
@@ -2334,19 +2870,19 @@ function setSidebarWidth(value) {
 }
 
 function setTopbarHeight(value) {
-  const height = clamp(parseInt(value, 10) || 152, 58, 260);
+  const height = clamp(parseInt(value, 10) || 178, 58, 300);
   document.documentElement.style.setProperty("--topbar-max-height", `${height}px`);
 }
 
 function setReaderWidth(value) {
-  const width = clamp(parseInt(value, 10) || 880, 680, 1180);
+  const width = clamp(parseInt(value, 10) || 880, 680, 1680);
   document.documentElement.style.setProperty("--reader-width", `${width}px`);
   els.readingWidthRange.value = String(width);
   updateReaderZoomWidth();
 }
 
 function setReadingZoom(value) {
-  const zoom = clamp(parseInt(value, 10) || 100, 80, 150);
+  const zoom = clamp(parseInt(value, 10) || 100, 80, 170);
   document.documentElement.style.setProperty("--reading-zoom", `${zoom / 100}`);
   document.documentElement.style.setProperty("--paragraph-font-size", `${(20 * zoom) / 100}px`);
   document.documentElement.style.setProperty("--heading-font-size", `${(26 * zoom) / 100}px`);
@@ -2366,25 +2902,66 @@ function updateReaderZoomWidth() {
 
 function setReaderFont(value) {
   const fontMap = {
-    serif: 'Georgia, "Times New Roman", "Microsoft YaHei", serif',
-    sans: 'Inter, ui-sans-serif, system-ui, "Microsoft YaHei", sans-serif',
+    literary: 'Georgia, "Baskerville", "Times New Roman", var(--reader-chinese-font), serif',
+    classic: '"Times New Roman", Georgia, var(--reader-chinese-font), serif',
+    humanist: 'Avenir, "Segoe UI", Inter, var(--reader-chinese-font), sans-serif',
+    rounded: '"Trebuchet MS", Verdana, var(--reader-chinese-font), sans-serif',
     system: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif',
+    serif: 'Georgia, "Times New Roman", var(--reader-chinese-font), serif',
+    sans: 'Inter, ui-sans-serif, system-ui, var(--reader-chinese-font), sans-serif',
   };
   const next = fontMap[value] || fontMap.serif;
   document.documentElement.style.setProperty("--reader-font-family", next);
-  if (els.fontFamilySelect) els.fontFamilySelect.value = value in fontMap ? value : "serif";
+  const visibleValue = ["literary", "classic", "humanist", "rounded", "system"].includes(value) ? value : "literary";
+  if (els.fontFamilySelect) els.fontFamilySelect.value = visibleValue;
+}
+
+function setChineseReaderFont(value) {
+  const fontMap = {
+    system: '"PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif',
+    song: 'SimSun, "Songti SC", "Noto Serif CJK SC", serif',
+    kai: 'KaiTi, "Kaiti SC", STKaiti, serif',
+    hei: 'SimHei, "Microsoft YaHei", "PingFang SC", sans-serif',
+  };
+  const next = fontMap[value] || fontMap.system;
+  document.documentElement.style.setProperty("--reader-chinese-font", next);
+  if (els.chineseFontSelect) els.chineseFontSelect.value = value in fontMap ? value : "system";
 }
 
 function setReaderFormat(value) {
   const presets = {
-    compact: { line: 1.65, paragraph: "16px" },
-    comfortable: { line: 1.9, paragraph: "24px" },
-    loose: { line: 2.12, paragraph: "32px" },
+    compact: { line: 1.6, paragraph: "16px" },
+    comfortable: { line: 1.7, paragraph: "24px" },
+    loose: { line: 1.8, paragraph: "32px" },
   };
   const preset = presets[value] || presets.comfortable;
-  document.documentElement.style.setProperty("--reader-line-height", String(preset.line));
+  setReaderLineHeight(preset.line);
   document.documentElement.style.setProperty("--reader-paragraph-gap", preset.paragraph);
   if (els.formatSelect) els.formatSelect.value = value in presets ? value : "comfortable";
+}
+
+function setReaderLineHeight(value) {
+  const lineHeight = clamp(Number(value) || 1.7, 1.6, 1.8);
+  document.documentElement.style.setProperty("--reader-line-height", lineHeight.toFixed(2));
+  if (els.lineHeightRange) els.lineHeightRange.value = lineHeight.toFixed(2);
+  if (els.lineHeightValue) els.lineHeightValue.textContent = lineHeight.toFixed(2);
+}
+
+function setReaderBackground(value) {
+  const palettes = {
+    paper: { stage: "#f4f0e6", panel: "#fbf7ed", text: "#26251f", line: "#e4dac8" },
+    white: { stage: "#f6f7f8", panel: "#ffffff", text: "#202426", line: "#dfe5e8" },
+    green: { stage: "#edf5ee", panel: "#f7fbf7", text: "#202920", line: "#d8e6d9" },
+    blue: { stage: "#edf4fb", panel: "#f8fbff", text: "#202733", line: "#d9e3ef" },
+    rose: { stage: "#fbf0f1", panel: "#fff8f8", text: "#302225", line: "#ead6d9" },
+    dark: { stage: "#151a1c", panel: "#1f2627", text: "#e8eee9", line: "#3d4848" },
+  };
+  const palette = palettes[value] || palettes.paper;
+  document.documentElement.style.setProperty("--reader-stage-bg", palette.stage);
+  document.documentElement.style.setProperty("--reader-panel-bg", palette.panel);
+  document.documentElement.style.setProperty("--reader-text-color", palette.text);
+  document.documentElement.style.setProperty("--reader-line-color", palette.line);
+  if (els.readerBgSelect) els.readerBgSelect.value = value in palettes ? value : "paper";
 }
 
 function setPageMode(value) {
@@ -2481,8 +3058,13 @@ function resizePopover(event) {
     height = clamp(height, state.isPopoverCollapsed ? 180 : 240, Math.max(180, bounds.bottom - bounds.top));
     if (corner.includes("n")) top = resize.top + resize.height - height;
     top = clamp(top, bounds.top, Math.max(bounds.top, bounds.bottom - height));
-    els.selectionPopover.style.right = "0px";
-    els.selectionPopover.style.left = "";
+    if (state.popoverDockSide === "left") {
+      els.selectionPopover.style.left = "0px";
+      els.selectionPopover.style.right = "";
+    } else {
+      els.selectionPopover.style.right = "0px";
+      els.selectionPopover.style.left = "";
+    }
     els.selectionPopover.style.width = `${width}px`;
     els.selectionPopover.style.height = `${height}px`;
     els.selectionPopover.style.top = `${top}px`;
@@ -2561,6 +3143,7 @@ function movePopoverTo(x, y) {
   const margin = 12;
   const left = clamp(x, margin, window.innerWidth - rect.width - margin);
   const top = clamp(y, margin, window.innerHeight - rect.height - margin);
+  els.selectionPopover.style.right = "";
   els.selectionPopover.style.left = `${left}px`;
   els.selectionPopover.style.top = `${top}px`;
   state.popoverPosition = { x: left, y: top };
@@ -2594,16 +3177,22 @@ function updatePopoverPinState() {
   els.pinPopoverBtn?.setAttribute("aria-pressed", String(state.isPopoverPinned));
   if (els.popoverHint) {
     if (state.isPopoverDocked) {
-      els.popoverHint.textContent = state.isPopoverCollapsed ? "右侧已收起，点击展开后继续翻译/评分" : "已固定在右侧，可拖右下角调整大小";
+      const sideLabel = state.popoverDockSide === "left" ? "左侧" : "右侧";
+      els.popoverHint.textContent = state.isPopoverCollapsed
+        ? `${sideLabel}已收起，点击展开后继续翻译/评分`
+        : `已固定在${sideLabel}，可上下拖动并用四角调整大小`;
     } else {
       els.popoverHint.textContent = state.isPopoverPinned ? "已固定，可拖动调整位置，右下角调大小" : "拖动标题移动，右下角调大小";
     }
   }
 }
 
-function togglePopoverDock() {
-  state.isPopoverDocked = !state.isPopoverDocked;
+function togglePopoverDock(side = "right") {
+  const nextSide = side === "left" ? "left" : "right";
+  const shouldUndock = state.isPopoverDocked && state.popoverDockSide === nextSide;
+  state.isPopoverDocked = !shouldUndock;
   if (state.isPopoverDocked) {
+    state.popoverDockSide = nextSide;
     state.isPopoverPinned = true;
     state.isPopoverCollapsed = false;
     els.selectionPopover.hidden = false;
@@ -2617,6 +3206,7 @@ function togglePopoverDock() {
 function togglePopoverCollapse() {
   if (!state.isPopoverDocked) {
     state.isPopoverDocked = true;
+    state.popoverDockSide = state.popoverDockSide || "right";
     state.isPopoverPinned = true;
     positionDockedPopover();
   }
@@ -2628,9 +3218,11 @@ function togglePopoverCollapse() {
 }
 
 function updatePopoverModeState() {
-  els.selectionPopover.classList.toggle("docked-right", state.isPopoverDocked);
+  els.selectionPopover.classList.toggle("docked-right", state.isPopoverDocked && state.popoverDockSide !== "left");
+  els.selectionPopover.classList.toggle("docked-left", state.isPopoverDocked && state.popoverDockSide === "left");
   els.selectionPopover.classList.toggle("collapsed", state.isPopoverDocked && state.isPopoverCollapsed);
-  els.dockPopoverBtn?.setAttribute("aria-pressed", String(state.isPopoverDocked));
+  els.dockPopoverBtn?.setAttribute("aria-pressed", String(state.isPopoverDocked && state.popoverDockSide !== "left"));
+  els.dockLeftPopoverBtn?.setAttribute("aria-pressed", String(state.isPopoverDocked && state.popoverDockSide === "left"));
   els.collapsePopoverBtn?.setAttribute("aria-pressed", String(state.isPopoverCollapsed));
   if (state.isPopoverDocked) positionDockedPopover();
 }
@@ -3053,40 +3645,14 @@ function rangeForText(root, text) {
   return range;
 }
 
-function boldSelectedText() {
-  if (!state.selectionRange || !state.selectedText) return;
-
-  const range = state.selectionRange.cloneRange();
-  if (!els.readerContent.contains(range.commonAncestorContainer)) {
-    showToast("请重新选择要加粗的文本");
-    return;
-  }
-
-  const wrapper = document.createElement("strong");
-  wrapper.className = "user-bold";
-  try {
-    const fragment = range.extractContents();
-    wrapper.append(fragment);
-    range.insertNode(wrapper);
-
-    const selection = window.getSelection();
-    selection.removeAllRanges();
-    const newRange = document.createRange();
-    newRange.selectNodeContents(wrapper);
-    selection.addRange(newRange);
-    setSelection(newRange, wrapper.textContent);
-    showPopoverForRange(newRange);
-    showToast("已加粗");
-  } catch {
-    showToast("这个跨段选择无法直接加粗，请缩小选择范围。");
-  }
-}
-
 function startRecording() {
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!Recognition) {
+    els.scoreOutput.innerHTML =
+      "当前手机浏览器不支持网页语音识别。请在 Chrome/Edge 中打开，或先听原句后把自己读出的内容手动输入，再点“评分”。";
     showToast("当前浏览器不支持语音识别，可手动输入后评分。");
     els.transcriptInput.focus();
+    els.transcriptInput.scrollIntoView({ behavior: "smooth", block: "center" });
     return;
   }
 
@@ -3096,18 +3662,24 @@ function startRecording() {
   }
 
   stopRecording();
+  const expectedText = normalizeInlineText(state.selectedText || els.practiceTargetText.textContent || "");
+  const expectedWordCount = countWords(expectedText);
+  const useLongMode = expectedWordCount > 12 || window.matchMedia("(max-width: 820px)").matches;
   const recognition = new Recognition();
   recognition.lang = selectedVoiceConfig().lang || "en-US";
   recognition.interimResults = true;
-  recognition.continuous = false;
+  recognition.continuous = useLongMode;
   recognition.maxAlternatives = 1;
   state.recognition = recognition;
+  state.recognitionActive = true;
+  state.recognitionStopRequested = false;
+  state.recognitionRestartCount = 0;
 
   let finalTranscript = "";
   recognition.onstart = () => {
     els.recordBtn.disabled = true;
     els.recordStopBtn.disabled = false;
-    els.scoreOutput.textContent = "正在听...";
+    els.scoreOutput.textContent = useLongMode ? "正在听长句，可分段朗读；停顿后会继续识别..." : "正在听...";
   };
   recognition.onresult = (event) => {
     let interim = "";
@@ -3119,28 +3691,65 @@ function startRecording() {
     els.transcriptInput.value = normalizeInlineText(`${finalTranscript} ${interim}`);
   };
   recognition.onerror = (event) => {
+    if (event.error === "no-speech" && useLongMode && state.recognitionRestartCount < 2 && !state.recognitionStopRequested) {
+      els.scoreOutput.textContent = "暂时没有识别到声音，请继续读，我会再听一次...";
+      return;
+    }
     els.scoreOutput.textContent = `识别中断：${event.error || "请检查麦克风权限"}`;
   };
   recognition.onend = () => {
+    const transcript = els.transcriptInput.value.trim();
+    const heardEnough = countWords(transcript) >= Math.min(expectedWordCount, 18);
+    if (
+      state.recognitionActive &&
+      !state.recognitionStopRequested &&
+      useLongMode &&
+      !heardEnough &&
+      state.recognitionRestartCount < 2
+    ) {
+      state.recognitionRestartCount += 1;
+      els.scoreOutput.textContent = `继续听第 ${state.recognitionRestartCount + 1} 轮，请接着读...`;
+      window.setTimeout(() => {
+        try {
+          recognition.start();
+        } catch {
+          state.recognitionStopRequested = true;
+          recognition.onend();
+        }
+      }, 350);
+      return;
+    }
+
+    state.recognitionActive = false;
     els.recordBtn.disabled = false;
     els.recordStopBtn.disabled = true;
-    if (els.transcriptInput.value.trim()) {
+    if (transcript) {
       scoreTranscript(els.transcriptInput.value);
     } else if (!els.scoreOutput.textContent.startsWith("识别中断")) {
       els.scoreOutput.textContent = "没有识别到声音，也可以手动输入后评分。";
     }
   };
-  recognition.start();
+  try {
+    recognition.start();
+  } catch {
+    els.scoreOutput.textContent = "语音识别未能启动，请检查麦克风权限或刷新后重试。";
+    els.recordBtn.disabled = false;
+    els.recordStopBtn.disabled = true;
+  }
 }
 
 function stopRecording() {
   if (!state.recognition) return;
+  state.recognitionStopRequested = true;
+  state.recognitionActive = false;
   try {
     state.recognition.stop();
   } catch {
     // Already stopped.
   }
   state.recognition = null;
+  els.recordBtn.disabled = false;
+  els.recordStopBtn.disabled = true;
 }
 
 function scoreTranscript(transcript) {
@@ -3247,6 +3856,7 @@ function renderScore(result) {
     <div>多识别：${escapeHtml(result.extra.length ? result.extra.join(", ") : "无")}</div>
     <div>${result.tips.map(escapeHtml).join("<br>")}</div>
   `;
+  updateDailyTaskScore(result.score);
   speakScoreResult(result, level);
 }
 
